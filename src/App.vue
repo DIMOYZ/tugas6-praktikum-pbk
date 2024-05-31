@@ -40,6 +40,12 @@
 import { reactive, ref, onMounted, computed } from 'vue';
 import axios from 'axios';
 
+// Konfigurasi JSONBin
+const API_KEY = '$2a$10$QcQvQjWk5eWVEa8hSTOuhej/Nned.oWuTPqYYlHP3cYZRVnohhwuO';
+const BIN_ID = '665991a3acd3cb34a850841a';
+const BASE_URL = `https://api.jsonbin.io/v3/b/${BIN_ID}`;
+
+// Inisialisasi form dan data articles
 const form = reactive({
   id: null,
   title: '',
@@ -60,31 +66,47 @@ const contentKey = computed(() => {
   }));
 });
 
+// Fungsi untuk memuat data dari JSONBin
 async function loadArticles() {
   try {
-    const response = await axios.get('http://localhost:3000/articles');
-    articles.value = response.data;
+    const response = await axios.get(`${BASE_URL}/latest`, {
+      headers: {
+        'X-Master-Key': API_KEY,
+      },
+    });
+    articles.value = response.data.record.articles;
   } catch (error) {
     console.error('Error loading articles', error);
   }
 }
 
+// Fungsi untuk menyimpan artikel baru atau memperbarui artikel yang ada
 async function saveArticle() {
   try {
+    let updatedArticles;
     if (form.id) {
       // Update existing article
-      await axios.put(`http://localhost:3000/articles/${form.id}`, {
-        title: form.title,
-        content: form.content,
-      });
+      updatedArticles = articles.value.map(article =>
+        article.id === form.id ? { ...article, title: form.title, content: form.content } : article
+      );
     } else {
       // Create new article
-      const response = await axios.post('http://localhost:3000/articles', {
+      const newArticle = {
+        id: Date.now(),
         title: form.title,
         content: form.content,
-      });
-      form.id = response.data.id;
+      };
+      updatedArticles = [...articles.value, newArticle];
     }
+
+    // Update bin di JSONBin
+    await axios.put(BASE_URL, { articles: updatedArticles }, {
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Master-Key': API_KEY,
+      },
+    });
+
     await loadArticles();
     resetForm();
   } catch (error) {
@@ -92,21 +114,33 @@ async function saveArticle() {
   }
 }
 
+// Fungsi untuk mengedit artikel
 function editArticle(article) {
   form.id = article.id;
   form.title = article.title;
   form.content = article.content;
 }
 
+// Fungsi untuk menghapus artikel
 async function deleteArticle(id) {
   try {
-    await axios.delete(`http://localhost:3000/articles/${id}`);
+    const updatedArticles = articles.value.filter(article => article.id !== id);
+
+    // Update bin di JSONBin
+    await axios.put(BASE_URL, { articles: updatedArticles }, {
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Master-Key': API_KEY,
+      },
+    });
+
     await loadArticles();
   } catch (error) {
     console.error('Error deleting article', error);
   }
 }
 
+// Fungsi untuk mereset form
 function resetForm() {
   form.id = null;
   form.title = '';
